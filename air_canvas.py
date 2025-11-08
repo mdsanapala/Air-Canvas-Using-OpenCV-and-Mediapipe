@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 import mediapipe as mp
 import math
-import os
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -22,10 +21,9 @@ hands = mp_hands.Hands(
 
 prev_x, prev_y = 0, 0
 color = (255, 0, 0)
-eraser_mode = False
 save_count = 1
 
-# ✅ Function to check which fingers are up
+# ✅ Function: detect finger states
 def finger_states(hand):
     tips = [4, 8, 12, 16, 20]
     fingers = []
@@ -45,7 +43,7 @@ def finger_states(hand):
 
     return fingers
 
-# ✅ Distance helper
+# ✅ Helper: distance between two points
 def distance(p1, p2):
     return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
 
@@ -71,23 +69,17 @@ while True:
         hand = result.multi_hand_landmarks[0]
         h, w, _ = frame.shape
 
-        x1 = int(hand.landmark[8].x * w)
+        # ✅ Important Points
+        x1 = int(hand.landmark[8].x * w)   # Index finger tip
         y1 = int(hand.landmark[8].y * h)
-
-        x2 = int(hand.landmark[4].x * w)
+        x2 = int(hand.landmark[4].x * w)   # Thumb tip
         y2 = int(hand.landmark[4].y * h)
 
         fingers = finger_states(hand)
 
-        # ✅ Gestures
-        draw_mode = (fingers == [0,1,0,0,0])      # Index finger only
-        stop_mode = (fingers == [0,0,0,0,0])      # Fist
-
-        # ✅ Eraser (pinch)
-        if distance((x1, y1), (x2, y2)) < 30:
-            eraser_mode = True
-        else:
-            eraser_mode = False
+        draw_mode = (fingers == [0,1,0,0,0])     # Index finger only
+        fist_mode = (fingers == [0,0,0,0,0])     # Fist
+        eraser_mode = distance((x1, y1), (x2, y2)) < 40  # Pinch gesture
 
         # ✅ Button Actions
         if 10 < x1 < 60 and 10 < y1 < 60:
@@ -99,28 +91,32 @@ while True:
         if 200 < x1 < 280 and 10 < y1 < 60:
             canvas = np.zeros((480, 640, 3), dtype=np.uint8)
 
-        # ✅ Save
+        # ✅ Save Button
         if 300 < x1 < 380 and 10 < y1 < 60:
             filename = f"drawing_{save_count}.png"
             cv2.imwrite(filename, canvas)
-            print(f"✅ Saved: {filename}")
+            print("✅ Saved:", filename)
             save_count += 1
 
-        # ✅ STOP mode (fist)
-        if stop_mode:
+        # ✅ STOP when fist
+        if fist_mode:
             prev_x, prev_y = 0, 0
             cv2.putText(frame, "STOP", (450, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
 
-        # ✅ DRAW mode (index finger only)
+        # ✅ Erase (PINCH)
+        elif eraser_mode:
+            if prev_x == 0 and prev_y == 0:
+                prev_x, prev_y = x1, y1
+
+            cv2.line(canvas, (prev_x, prev_y), (x1, y1), (0, 0, 0), 40)
+            prev_x, prev_y = x1, y1
+
+        # ✅ Draw (INDEX only)
         elif draw_mode:
             if prev_x == 0 and prev_y == 0:
                 prev_x, prev_y = x1, y1
 
-            if eraser_mode:
-                cv2.line(canvas, (prev_x, prev_y), (x1, y1), (0,0,0), 40)
-            else:
-                cv2.line(canvas, (prev_x, prev_y), (x1, y1), color, 5)
-
+            cv2.line(canvas, (prev_x, prev_y), (x1, y1), color, 5)
             prev_x, prev_y = x1, y1
 
         else:
